@@ -1,0 +1,1210 @@
+Контекст базы данных для работы с Entity Framework
+// Класс наследует DbContext и представляет базы данных для работы с Entity Framework
+public class ApplicationContext : DbContext
+{
+    public DbSet<User> Users { get; set; } = null!;
+    public DbSet<SleepRecording> SleepRecording { get; set; } = null!;
+    public DbSet<Recommendation> Recommendations { get; set; } = null!;
+    public DbSet<PersonalData> PersonalData { get; set; } = null!;
+    public ApplicationContext()
+    {
+        //Database.EnsureCreated();
+    }
+    // Настройка параметров контекста базы данных
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        base.OnConfiguring(optionsBuilder);
+        optionsBuilder.LogTo(Console.WriteLine);
+        optionsBuilder.UseNpgsql(@"Host=aws-0-eu-north-1.pooler.supabase.com;Username=postgres.wnbxpmpviailsluvclrz;Password=Abc4345Ak74;Database=postgres");
+    }
+}
+Форма авторизации
+public partial class Authorization : Form
+{
+    bool isStHide;
+public Authorization()
+{
+    InitializeComponent();
+    this.MaximizeBox = false;
+    InitializingInterfaceElements();
+}
+private void but_logIn_Click(object sender, EventArgs e)
+{
+    try
+    {
+        // Проверка, заполнены ли поля логина и пароля
+        if (string.IsNullOrWhiteSpace(textBox_login.Text) || string.IsNullOrWhiteSpace(textBox_password.Text))
+        {
+            MessageBox.Show("Пожалуйста, заполните все поля.");
+            return;
+        }
+        using (var context = new ApplicationContext())
+        {
+            // Поиск пользователя, чьи логин и пароль совпадают с введенными, в базе данных 
+            var user = context.Users.FirstOrDefault(u => u.Login == textBox_login.Text && u.Password == textBox_password.Text);
+            if (user != null)
+            {
+                // Сохранение ID текущего пользователя и переход в главное меню
+                CurrentUser.UserId = user.Id;
+                MessageBox.Show("Авторизация успешна!");
+                MainMenu mainMenu = new MainMenu();
+                mainMenu.Show();
+                StartTab? startTab = (Application.OpenForms["StartTab"] as StartTab);
+                if (startTab != null)
+                {
+                    startTab.Hide();
+                }
+                this.Hide();
+            }
+            else
+            {
+                Authorization authorization = new Authorization();
+                MessageBox.Show("Логин или пароль введены неверно. Проверьте данные и попробуйте снова.", "Ошибка авторизации",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                this.Dispose();
+                authorization.Show();
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show($"Ошибка при авторизации: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
+// Раализация функции гостевого входа в систему
+private void lab_guestLogin_Click(object sender, EventArgs e)
+{
+    try
+    {
+        using(var context = new ApplicationContext())
+        {
+            var guestUser = new User
+            {
+                Login = $"Guest_{Guid.NewGuid().ToString().Substring(0, 8)}",
+                Password = Guid.NewGuid().ToString(),
+                Email = null,
+                IsGuest = true
+            };
+            context.Users.Add(guestUser);
+            context.SaveChanges();
+            CurrentUser.UserId = guestUser.Id;
+            MessageBox.Show("Вход выполнен как гость!", "Успешно", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MainMenu mainMenu = new MainMenu();
+            mainMenu.Show();
+            StartTab? startTab = (Application.OpenForms["StartTab"] as StartTab);
+            if (startTab != null)
+            {
+                startTab.Hide();
+            }
+            this.Hide();
+        }
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
+Форма регистрации
+public partial class Registration : Form
+ {
+     public Registration()
+     {
+         InitializeComponent();
+         this.MaximizeBox = false;
+         InitializingInterfaceElements();
+     }
+    // Метод на проверку валидности данных
+    private bool ProcessingRegistration(string login, string email, string password, string replayPassword)
+    {
+        // Проверка на пустые поля
+        if (string.IsNullOrWhiteSpace(login) || string.IsNullOrWhiteSpace(email) ||
+            string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(replayPassword))
+        {
+            MessageBox.Show("Все поля должны быть заполнены.");
+            return false;
+        }
+        // Проверка на совпадение паролей
+        if (password != replayPassword)
+        {
+            MessageBox.Show("Пароли не совпадают.");
+            return false;
+        }
+        // Проверка на корректность логина
+        if (!IsValidLogin(login))
+        {
+            MessageBox.Show("Логин должен содержать не менее 3 символов и состоять только из букв и цифр.");
+            return false;
+        }
+        // Проверка на корректность email
+        if (!IsValidEmail(email))
+        {
+            MessageBox.Show("Введите корректный адрес электронной почты.");
+            return false;
+        }
+        // Проверка на корректность пароля
+        if (!IsValidPassword(password))
+        {
+            MessageBox.Show("Пароль должен содержать не менее 3 символов и состоять только из букв и цифр.");
+            return false;
+        }
+        return true;
+    }
+    private void but_reg_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            if (!ProcessingRegistration(textBox_login.Text, textBox_email.Text, textBox_password.Text, textBox_replayPassw.Text))
+                return;
+            using (var context = new ApplicationContext())
+            {
+                // Проверка на наличие пользователя с таким же логином
+                if (context.Users.Any(u => u.Login == textBox_login.Text))
+                {
+                    MessageBox.Show("Этот логин уже занят.");
+                    return;
+                }
+                // Проверка на наличие пользователя с таким же email
+                if (context.Users.Any(u => u.Email == textBox_email.Text))
+                {
+                    MessageBox.Show("Этот email уже используется.");
+                    return;
+                }
+                var user = new User
+                {
+                    Login = textBox_login.Text,
+                    Password = textBox_password.Text,
+                    Email = textBox_email.Text
+                };
+                context.Users.Add(user);
+                context.SaveChanges();
+            }
+            MessageBox.Show("Регистрациия прошла успешно.");
+            this.Close();
+            Authorization authorization = new Authorization();
+            authorization.Show();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка при регистрации: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+    private void lab_back_Click(object sender, EventArgs e)
+    {
+        Authorization authorization = new Authorization();
+        authorization.Show();
+        this.Close();
+    }
+    private bool IsValidEmail(string email)
+    {
+        try
+        {
+            string emailPattern = @"^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*@[a-zA-Z]+\.[a-zA-Z]+$";
+            if (!Regex.IsMatch(email, emailPattern)) // Проверка на соответствие шаблону
+                return false;
+            var addr = new System.Net.Mail.MailAddress(email);
+            if (addr.Address != email) // Проверка на действительность email
+                return false;
+
+            string domain = email.Split('@')[1]; // Проверка на существование домена
+            return DomainExists(domain);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    // Метод для проверки корректности логина
+    private bool IsValidLogin(string login)
+    {
+        // Логин должен быть не менее 3 символов и содержать только буквы и цифры
+        return login.Length >= 3 && login.All(c => char.IsLetterOrDigit(c));
+    }
+    // Метод для проверки корректности пароля
+    private bool IsValidPassword(string password)
+    {
+        // Пароль должен содержать не менее 3 символов
+        return password.Length >= 3;
+    }
+    // Метод для проверки существования домена
+    private static bool DomainExists(string domain)
+    {
+        try
+        {
+            var hostEntry = Dns.GetHostEntry(domain);
+            return hostEntry.AddressList.Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    // Обработчик нажатия клавиши в поле email (проверка ввода только букв, цифр, точки и @)
+    private void textBox_email_KeyPress(object sender, KeyPressEventArgs e)
+    {
+        if (!char.IsLetterOrDigit(e.KeyChar) && e.KeyChar != '.' && e.KeyChar != '@' && e.KeyChar != '\b')
+        {
+            e.Handled = true;
+        }
+    }
+}
+Главное меню
+public partial class MainMenu : Form
+{
+    private SleepTracking? sleepTracking;
+    private AddingSleepRecording? addingSleepRecording;
+    private ChartsReports? chartsReports;
+    private Recommendations? recommendations;
+    private bool isExiting = false;
+    private int userId; // Идентификатор текущего пользователя
+    public MainMenu()
+    {
+        InitializeComponent();
+        userId = CurrentUser.UserId; // Получаем ID текущего пользователя
+        this.MaximizeBox = false;
+
+        InitializingInterfaceElements();
+    }
+    // Открывает форму с графиками и отчетами
+    private void lab_chartAndReports_Click(object sender, EventArgs e)
+    {
+        OpenSingleForm();
+        if (chartsReports == null || chartsReports.IsDisposed)
+        {
+            chartsReports = new ChartsReports(userId);
+            chartsReports.Show();
+        }
+        else
+        {
+            chartsReports.Refresh();
+            chartsReports.Activate();
+        }
+    }
+    // Открывает форму с рекомендациями
+    private void lab_recommend_Click(object sender, EventArgs e)
+    {
+        OpenSingleForm();
+        if (recommendations == null || recommendations.IsDisposed)
+        {
+            recommendations = new Recommendations();
+            recommendations.Show();
+        }
+        else
+        {
+            recommendations.Refresh();
+            recommendations.Activate();
+        }
+    }
+    // Открывает форму отслеживания сна
+    private void lab_sleepTracking_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            OpenSingleForm();
+            if (sleepTracking == null || sleepTracking.IsDisposed)
+            {
+                sleepTracking = new SleepTracking(userId);
+                sleepTracking.Show();
+            }
+            else
+            {
+                sleepTracking.Refresh();
+                sleepTracking.Activate();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ой, немного забаговалось заполнение таблицы, не пугайтесь. Произошла ошибка при сохранении данных: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+    private void but_exit_Click(object sender, EventArgs e)
+    {
+        if (!isExiting)
+        {
+            var result = MessageBox.Show("Вы уверены, что хотите выйти?", "Выход", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (result == DialogResult.Yes)
+            {
+                if (IsGuestUser(CurrentUser.UserId))
+                {
+                    DeleteGuestUser(CurrentUser.UserId);
+                }
+                isExiting = true;
+                Application.Exit();
+            }
+        }
+    }
+    // Метод закрывает все открытые формы, чтобы оставалась только одна
+    private void OpenSingleForm()
+    {
+        sleepTracking = Application.OpenForms["SleepTracking"] as SleepTracking;
+        if (sleepTracking != null)
+        {
+            sleepTracking.Close();
+        }
+        addingSleepRecording = Application.OpenForms["addingSleepRecording"] as AddingSleepRecording;
+        if (addingSleepRecording != null)
+        {
+            addingSleepRecording.Close();
+        }
+        chartsReports = Application.OpenForms["ChartsReports"] as ChartsReports;
+        if (chartsReports != null)
+        {
+            chartsReports.Close();
+        }
+        recommendations = Application.OpenForms["Recommendations"] as Recommendations;
+        if (recommendations != null)
+        {
+            recommendations.Close();
+        }
+    }
+    // При закрытии удаляет гостевого пользователя, если он существует, и завершает работу программы.
+    private void MainMenu_FormClosed(object sender, FormClosedEventArgs e)
+    {
+        if (IsGuestUser(CurrentUser.UserId))
+        {
+            DeleteGuestUser(CurrentUser.UserId);
+        }
+        isExiting = true;
+        Application.Exit();
+    }
+    // Метод открыват форму Личный кабинет
+    // Если пользователь гость, показывает сообщение с просьбой авторизоваться. В противном случае открывает форму личного кабинета.
+    private void label_personalAccount_Click(object sender, EventArgs e)
+    {
+        if (IsGuestUser(CurrentUser.UserId))
+        {
+            MessageBox.Show("Эта функция недоступна для гостя. Пожалуйста, авторизуйтесь.", "Доступ запрещен", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Authorization authorization = new Authorization();
+            authorization.FormClosed += (s, args) =>
+            {
+                this.Show();
+            };
+            authorization.Show();
+            this.Hide();
+        }
+        else
+        {
+            OpenSingleForm();
+            PersonalAccount account = new PersonalAccount();
+            account.Show();
+            this.Hide();
+        }
+    }
+    // Метод проверяет, является ли пользователь гостем, по его ID.
+    private bool IsGuestUser(int userId)
+    {
+        using (var context = new ApplicationContext())
+        {
+            var user = context.Users.FirstOrDefault(u => u.Id == userId);
+            return user?.IsGuest ?? false;
+        }
+    }
+    // Метод удаляет гостевого пользователя из базы данных.
+    private void DeleteGuestUser(int userId)
+    {
+        using (var context = new ApplicationContext())
+        {
+            var user = context.Users.FirstOrDefault(u => u.Id == userId && u.IsGuest);
+            if (user != null)
+            {
+                context.Users.Remove(user);
+                context.SaveChanges();
+            }
+        }
+    }
+}
+Форма отслеживания сна
+public partial class SleepTracking : Form
+{
+    private ApplicationContext Context; // Контекст для работы с базой данных
+    private int userId;// Идентификатор текущего пользователя
+    // Конструктор, инициализирует форму и загружает данные для текущего пользователя
+    public SleepTracking(int idUser)
+    {
+        InitializeComponent();
+        Context = new ApplicationContext();// Создание контекста для работы с базой данных
+        userId = idUser;// Сохранение идентификатора пользователя
+
+        this.MaximizeBox = false;
+
+        InitializingInterfaceElements();
+        ConfigureDataGridView();// Настройка таблицы для отображения данных
+        LoadData();// Загрузка данных из базы
+    }
+// Загрузка данных из базы данных и отображение их в таблице
+private void LoadData()
+{
+    try
+    {
+        // Получение всех записей из базы
+        var records = Context.SleepRecording.ToList();
+        foreach (var record in records)
+        {
+            // Проверка, что запись принадлежит текущему пользователю
+            if (record.UserId == userId)
+            {
+                // Форматирование время начала и окончания сна
+                string startTime = record.SleepStart.ToString(@"hh\:mm");
+                string endTime = record.SleepEnd.ToString(@"hh\:mm");
+                // Добавляем запись в таблицу
+                dataGridView_show.Rows.Add(record.Date.ToString("dd.MM.yyyy"),
+                    startTime, endTime,
+                    Math.Round((decimal)record.SleepDuration, 2), record.SleepQuality);
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
+Форма добавления записей
+public partial class AddingSleepRecording : Form
+{
+    private SleepTracking? sleepTracking;
+    private ApplicationContext Context;
+    private int userId;
+    public AddingSleepRecording(int idUser)
+    {
+        InitializeComponent();
+        Context = new ApplicationContext();
+        userId = idUser;
+        this.MaximizeBox = false;
+        InitializingInterfaceElements();
+
+    }
+// Добавление записи в базу данных
+    private void but_save_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            DateTime date = dateTimePicker_date.Value.ToUniversalTime().Date;
+            TimeSpan tStart = dateTimePicker_tStart.Value.ToUniversalTime().TimeOfDay;
+            TimeSpan tEnd = dateTimePicker_tEnd.Value.ToUniversalTime().TimeOfDay;
+            string? quality = string.Empty;
+            if (tStart == tEnd)
+            {
+                MessageBox.Show("Время начала и конца сна не может совпадать.");
+                return;
+            }
+            if (comboBox_quality.SelectedItem != null)
+            {
+                quality = comboBox_quality.SelectedItem.ToString();
+            }
+            else
+            {
+                MessageBox.Show("Пожалуйста, выберите качество сна.");
+                return;
+            }
+            double duration = (tEnd - tStart).TotalHours;
+            if (duration < 0)
+                duration += 24;// Если время прошло через полночь, добавляем 24 часа
+            using (var context = new ApplicationContext())
+            {
+                var sleepRecording = new SleepRecording
+                {
+                    UserId = userId,
+                    Date = date,
+                    SleepStart = tStart,
+                    SleepEnd = tEnd,
+                    SleepDuration = duration,
+                    SleepQuality = quality,
+                };
+                context.SleepRecording.Add(sleepRecording);
+                context.SaveChanges();
+            }
+            MessageBox.Show("Запись успешно добавлена!");
+            sleepTracking = Application.OpenForms["SleepTracking"] as SleepTracking;
+            if (sleepTracking != null)
+            {
+                sleepTracking.Close();
+            }
+            if (sleepTracking == null || sleepTracking.IsDisposed)
+            {
+                sleepTracking = new SleepTracking(userId);
+                sleepTracking.Show();
+                this.Close();
+            }
+            else
+            {
+                sleepTracking.Refresh();
+                sleepTracking.Activate();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка: {ex.Message}");
+        }
+    }
+}
+Форма графика и отчета
+public partial class ChartsReports : Form
+{
+    private ApplicationContext Context;
+    private int userID;
+
+    public ChartsReports(int idUser)
+    {
+        InitializeComponent();
+        InitializeToolTip();
+        userID = idUser;
+        Context = new ApplicationContext();
+        this.MaximizeBox = false;
+        LoadSleepData();// Загружаем данные о сне
+    }
+// Метод для загрузки данных о сне из базы данных
+private void LoadSleepData()
+{
+    List<dynamic> sleepData = new List<dynamic>();
+
+    foreach (var record in Context.SleepRecording)
+    {
+                
+        if (record.UserId == userID)// Проверяем, что данные для текущего пользователя
+        {
+            SleepRecording sleepRecording = new SleepRecording
+            {
+                Date = record.Date,
+                SleepStart = record.SleepStart,
+                SleepEnd = record.SleepEnd,
+                SleepDuration = record.SleepDuration,
+                SleepQuality = record.SleepQuality
+            };
+
+            sleepData.Add(sleepRecording);
+        }
+    }
+    ChangeFilters(); // Применяем фильтры
+    InitializeReports(sleepData); // Инициализируем отчеты
+    InitializeElement(); // Настройка элементов формы
+}
+// Метод для применения фильтров и обновления графика
+private void ChangeFilters()
+{
+    List<dynamic> sleepData = new List<dynamic>();
+
+    // Перебираем все записи о сне из таблицы SleepRecording в контексте базы данных.
+foreach (var record in Context.SleepRecording)
+    {
+        if (record.UserId == userID)
+        {
+            SleepRecording sleepRecording = new SleepRecording
+            {
+                Date = record.Date,
+                SleepStart = record.SleepStart,
+                SleepEnd = record.SleepEnd,
+                SleepDuration = record.SleepDuration,
+                SleepQuality = record.SleepQuality
+            };
+            sleepData.Add(sleepRecording);
+        }
+    }
+
+    // Фильтрация данных по дате
+    var dataFilt = sleepData.Where(data => data.Date >= dateTimePicker_start.Value.Date &&
+        data.Date <= dateTimePicker_end.Value.Date).OrderBy(data => data.Date).ToList();
+
+    InitializeChart(dataFilt);// Обновляем график с отфильтрованными данными
+}
+// Метод для создания графика сна
+ private void InitializeChart(List<dynamic> sleepData)
+ {
+     plotView_chartSleep.Size = new Size(800, 300);
+     plotView_chartSleep.Location = new Point((this.ClientSize.Width - plotView_chartSleep.Width) / 2, 100);
+
+     PlotModel plotModel = new PlotModel
+     {
+         Title = "График сна",
+     };
+
+     var xAxis = new DateTimeAxis
+{
+    Position = AxisPosition.Bottom,
+    StringFormat = "dd.MM.yy",
+    Title = "Дата",
+    IsZoomEnabled = true,
+    IsPanEnabled = true
+};
+var yAxis = new LinearAxis
+{
+    Position = AxisPosition.Left,
+    Minimum = 0,
+    Maximum = 24,
+    Title = "Продолжительность сна (часы)",
+    MajorStep = 2,
+    IsZoomEnabled = false,
+    IsPanEnabled = false
+};
+    plotModel.Axes.Add(xAxis);// Добавление оси X
+     plotModel.Axes.Add(yAxis);// Добавление оси Y
+     // Настройка данных для графика
+     AreaSeries areaSeries = new AreaSeries
+     {
+         Title = "Продолжительность сна",
+         MarkerType = MarkerType.Circle,  // Тип маркера
+         Color = OxyColors.MediumPurple,  // Цвет линии 
+         BrokenLineColor = OxyColors.MediumPurple, // Цвет прерывистой линии
+     };
+     // Добавление точек на график для каждого дня
+     foreach (var data in sleepData)
+     {
+         if (data.Date >= dateTimePicker_start.Value && data.Date <= dateTimePicker_end.Value)
+         {
+             DateTime date = data.Date;
+             double duration = data.SleepDuration;
+             areaSeries.Points.Add(new DataPoint(DateTimeAxis.ToDouble(date), duration));
+         }
+     }
+     plotModel.Series.Add(areaSeries); // Добавляем серию данных на график
+     plotView_chartSleep.Model = plotModel; // Отображаем график на форме
+ }
+// Метод для инициализации отчетов
+private void InitializeReports(List<dynamic> sleepData)
+{
+    panel_reports.Location = new Point(20, 420);
+    panel_reports.Size = new Size(950, 150);
+
+    int totalRecords = sleepData.Count;
+    label_totalRecording.ForeColor = Color.White;
+    label_totalRecording.Text = $"Общее количество записей: {totalRecords}";
+    label_totalRecording.Location = new Point(20, 20);
+
+    label_avgDuration.ForeColor = Color.White;
+    label_avgDuration.Text = $"Средняя продолжительность сна: {AvgDuration(sleepData):F2}";
+    label_avgDuration.Location = new Point(20, 50);
+
+    label_lastDateRecord.ForeColor = Color.White;
+    label_lastDateRecord.Text = $"Дата последней записи: {LastDate(sleepData)}";
+    label_lastDateRecord.Location = new Point(20, 110);
+}
+// Метод для вычисления средней продолжительности сна
+private double AvgDuration(List<dynamic> sleepData)
+{
+    double avgDuration = 0;
+    double sum = 0;
+    foreach (var duration in sleepData)
+    {
+        sum += duration.SleepDuration;
+    }
+    avgDuration = (sum / sleepData.Count);
+    return avgDuration;
+}
+// Метод для получения даты последней записи
+private DateTime LastDate(List<dynamic> sleepData)
+{
+    DateTime lastDate = new DateTime();
+    foreach (var date in sleepData)
+    {
+        if (date.Date > lastDate)
+        {
+            lastDate = date.Date;
+        }
+    }
+    return lastDate;
+}
+private void but_apply_Click(object sender, EventArgs e)
+{
+    ChangeFilters();
+    MessageBox.Show("График обновлен!");
+}
+Форма рекомендаций
+public partial class Recommendations : Form
+ {
+     public Recommendations()
+     {
+         InitializeComponent();
+         this.MaximizeBox = false;
+         this.BackColor = Color.AliceBlue;
+         InitializeElement();
+     }
+// Вычисление данных и вывод персонализированных рекомендаций по улучшению сна.
+ private void but_update_Click(object sender, EventArgs e)
+ {
+     try
+     {
+         using (var context = new ApplicationContext())
+         {
+             // Извлечение все записи о сне и фильтруем по текущему пользователю.
+             var sleepData = context.SleepRecording
+                         .Where(s => s.UserId == CurrentUser.UserId)
+                         .ToList();
+             if (!sleepData.Any())
+             {
+                 richTextBox_recommend.Text = "Нет данных о записях сна для формирования рекомендаций.";
+                 return;
+             }
+             if (sleepData.Count == 0)
+             {
+                 richTextBox_recommend.Text = "Нет данных о записях сна для формирования рекомендаций.";
+                 return;
+             }
+             var qualityScores = sleepData.Select(s => MapQualityToScore(s.SleepQuality)).ToList();
+             double averageQuality = qualityScores.Average();
+             double averageDuration = sleepData.Average(s => s.SleepDuration);
+             var recommendations = SleepRecommend.GetRecommendations(averageQuality, averageDuration);
+             if (recommendations.Any())
+             if (recommendations.Any())
+             {
+                 richTextBox_recommend.Text = string.Join(Environment.NewLine, recommendations);
+             }
+             else
+             {
+                 richTextBox_recommend.Text = "Рекомендации не найдены.";
+             }
+         }
+     }
+     catch (Exception ex)
+     {
+         richTextBox_recommend.Text = "Произошла ошибка при генерации рекомендаций.";
+         Console.WriteLine(ex.Message);
+         MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+     }
+
+ }
+ private int MapQualityToScore(string quality)
+ {
+     // Метод для преобразования качества сна в баллы
+     return quality switch
+     {
+         "Отличное" => 5,
+         "Хорошее" => 4,
+         "Среднее" => 3,
+         "Плохое" => 2,
+         "Ужасное" => 1,
+         _ => 0 // Если качество не распознано, возвращаем 0
+     };
+ }
+Форма личного кабинета
+public partial class PersonalAccount : Form
+{
+    private int userId;
+
+    public PersonalAccount()
+    {
+        InitializeComponent();
+        userId = CurrentUser.UserId;
+        this.MaximizeBox = false;
+        InitializingInterfaceElements();
+        LoadProfilePhoto();
+    }
+    private void PersonalAccount_FormClosed(object sender, FormClosedEventArgs e)
+    {
+        var mainMenu = Application.OpenForms["MainMenu"] as MainMenu;
+        if (mainMenu != null)
+        {
+            mainMenu.Show();
+
+        }
+    }
+    private void lab_personalData_Click(object sender, EventArgs e)
+    {
+        PersonalDataF personalData = new PersonalDataF();
+        OpenFormsInPanel(personalData);
+    }
+
+    private void lab_settingAccount_Click(object sender, EventArgs e)
+    {
+        SettingAccount settingAccount = new SettingAccount();
+        OpenFormsInPanel(settingAccount);
+    }
+    // Метод открывает форму в панели, закрывая предыдущую, если она есть.
+    private void OpenFormsInPanel(Form form)
+    {
+        if (panel_openForms.Controls.Count > 0)
+            panel_openForms.Controls[0].Dispose();
+        form.TopLevel = false;
+        form.Dock = DockStyle.Fill;
+        panel_openForms.Controls.Add(form);
+        panel_openForms.Tag = form;
+        form.Show();
+    }
+    // Метод загружает имя пользователя из базы данных и отображает его
+    private void LoadWelcName()
+    {
+        using (var context = new ApplicationContext())
+        {
+            var user = context.Users.FirstOrDefault(u => u.Id == CurrentUser.UserId);
+            if (user != null)
+            {
+                lab_welc.Text = user.Login;
+            }
+            else
+            {
+                lab_welc.Text = "Не указано";
+            }
+        }
+    }
+    // Метод обрабатывает клик по кнопке "Добавить фото".
+    // Открывает диалог выбора файла и отображает выбранное изображение в PictureBox
+    private void but_addPhoto_Click(object sender, EventArgs e)
+    {
+        using (OpenFileDialog openFileDialog = new OpenFileDialog())
+        {
+            openFileDialog.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp";
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                pictureBox_photo.Image = Image.FromFile(openFileDialog.FileName);
+            }
+        }
+    }
+    // Сохраняет выбранное фото в базе данных
+    private void but_save_Click(object sender, EventArgs e)
+    {
+        if (pictureBox_photo.Image != null)
+        {
+            using (var memoryStream = new MemoryStream())
+            {
+                pictureBox_photo.Image.Save(memoryStream, pictureBox_photo.Image.RawFormat);
+                byte[] photoBytes = memoryStream.ToArray();
+
+                using (var context = new ApplicationContext())
+                {
+                    var user = context.Users.FirstOrDefault(u => u.Id == userId);
+                    if (user != null)
+                    {
+                        user.Photo = photoBytes;
+                        context.SaveChanges();
+                        MessageBox.Show("Фото успешно сохранено.", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show("Пользователь не найден.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+        else
+        {
+            MessageBox.Show("Выберите фото перед сохранением.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+    // Метод загружает фото пользователя из базы данных и отображает его
+    private void LoadProfilePhoto()
+    {
+        using (var context = new ApplicationContext())
+        {
+            var user = context.Users.FirstOrDefault(u => u.Id == userId);
+            if (user != null && user.Photo != null)
+            {
+                using (var memoryStream = new MemoryStream(user.Photo))
+                {
+                    pictureBox_photo.Image = Image.FromStream(memoryStream);
+                }
+            }
+        }
+    }
+}
+Форма личных данных
+public partial class PersonalDataF : Form
+ {
+     private int userId;
+     public PersonalDataF()
+     {
+         InitializeComponent();
+         userId = CurrentUser.UserId;
+         InitializingInterfaceElements();
+     }
+// ЗАкрузка почты и ее вывод
+    private void LoadEmail()
+    {
+        using (var context = new ApplicationContext())
+        {
+            var user = context.Users.FirstOrDefault(u => u.Id == CurrentUser.UserId);
+            if (user != null)
+            {
+                lab_showEmail.Text = user.Email;
+            }
+            else
+            {
+                lab_showEmail.Text = "Не указано";
+            }
+        }
+    }
+//Выводит личные данные из базы данных
+    private void LoadPersonalData()
+    {
+        using (var context = new ApplicationContext())
+        {
+            var persData = context.PersonalData.FirstOrDefault(u => u.UserId == CurrentUser.UserId);
+            if(persData != null)
+            {
+                lab_showName.Text = persData.Name;
+                lab_showGender.Text = persData.Gender;
+                lab_showDateBirth.Text = $"{persData.BirthDate:dd.MM.yyyy}";
+            }
+            else
+            {
+                lab_showName.Text = "Не указано";
+                lab_showGender.Text = "Не указано";
+                lab_showDateBirth.Text = "Не указано";
+            }
+        }
+    }
+}
+Форма добавления личных данных
+public partial class AddPersonalData : Form
+{
+    private PersonalDataF? personalData;
+    public AddPersonalData()
+    {
+        InitializeComponent();
+        InitializingInterfaceElements();
+    }
+// Добавление личных данных в базу данных, с проверками
+private void but_apply_Click(object sender, EventArgs e)
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(textBox_name.Text))
+        {
+            MessageBox.Show("Имя не может быть пустым.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (comboBox_gender.SelectedItem == null)
+        {
+            MessageBox.Show("Пожалуйста, выберите пол.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        if (dateTimePicker_birthDate.Value > DateTime.Now)
+        {
+            MessageBox.Show("Дата рождения не может быть в будущем.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        using (var context = new ApplicationContext())
+        {
+            var persData = context.PersonalData.FirstOrDefault(pd => pd.UserId == CurrentUser.UserId);
+            if (persData == null)
+            {
+
+                persData = new PersonalData
+                {
+                    UserId = CurrentUser.UserId,
+                    Name = textBox_name.Text,
+                    Gender = comboBox_gender.SelectedItem.ToString(),
+                    BirthDate = dateTimePicker_birthDate.Value.ToUniversalTime(),
+                };
+                context.Add(persData);
+                MessageBox.Show("Данные успешно добавлены!");
+            }
+            else
+            {
+                persData.Name = textBox_name.Text;
+                persData.Gender = comboBox_gender.SelectedItem.ToString();
+                persData.BirthDate = dateTimePicker_birthDate.Value.ToUniversalTime();
+                MessageBox.Show("Данные успешно обновлены!");
+            }
+            context.SaveChanges();
+            this.Close();
+        }
+
+        personalData = Application.OpenForms["PersonalDataF"] as PersonalDataF;
+        if (personalData != null)
+        {
+            personalData = new PersonalDataF();
+            personalData.Refresh();
+        }
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show($"Произошла ошибка при сохранении данных: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
+Форма настроек учетной записи
+public partial class SettingAccount : Form
+{
+    private PersonalAccount? personalAccount;
+    private MainMenu? mainMenu;
+    private int userId;
+    public SettingAccount()
+    {
+        InitializeComponent();
+        userId = CurrentUser.UserId;
+        InitializingInterfaceElements();
+        LoadUserData();
+    }
+    // Метод загружает данные пользователя (логин и email) из базы данных и отображает их на форме
+    private void LoadUserData()
+    {
+        using (var context = new ApplicationContext())
+        {
+            var user = context.Users.FirstOrDefault(u => u.Id == userId);
+            if (user != null)
+            {
+                lab_showLogin.Text = user.Login;
+                lab_showEmail.Text = user.Email;
+            }
+        }
+    }
+    // Метод, который делает поле для ввода логина видимым
+    private void but_changeLogin_Click(object sender, EventArgs e)
+    {
+        textBox_login.Visible = true;
+        textBox_login.Text = lab_showLogin.Text;
+        lab_showLogin.Visible = false;
+        but_changeLogin.Visible = false;
+    }
+    // Метод, который делает поле для ввода почты видимым
+    private void but_changeEmail_Click(object sender, EventArgs e)
+    {
+        textBox_email.Visible = true;
+        textBox_email.Text = lab_showEmail.Text;
+        lab_showEmail.Visible = false;
+        but_changeEmail.Visible = false;
+    }
+
+    private void but_changePassword_Click(object sender, EventArgs e)
+    {
+        textBox_password.Visible = true;
+        but_changePassword.Visible = false;
+    }
+    // Выход из учетной записи
+    private void but_logOut_Click(object sender, EventArgs e)
+    {
+        var confirmResult = MessageBox.Show("Вы уверены, что хотите выйти из учетной записи?", "Выйти?", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (confirmResult == DialogResult.Yes)
+            Application.Restart();
+    }
+    // Удаление учетной записи
+    private void but_deleteAccount_Click(object sender, EventArgs e)
+    {
+        var confirmResult = MessageBox.Show("Вы уверены, что хотите удалить учетную запись?", "Удаление учетной записи", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (confirmResult == DialogResult.Yes)
+        {
+            using (var context = new ApplicationContext())
+            {
+                var user = context.Users.FirstOrDefault(u => u.Id == userId);
+                if (user != null)
+                {
+                    context.Users.Remove(user);
+                    context.SaveChanges();
+                    MessageBox.Show("Ваша учетная запись была удалена.");
+                    Application.Restart();
+                }
+            }
+        }
+    }
+    // Сохранение введеных данных
+    private void SaveChanges()
+    {
+        if (!Processing(textBox_login.Text, textBox_email.Text, textBox_password.Text))
+            return;
+        using (var context = new ApplicationContext())
+        {
+            var user = context.Users.FirstOrDefault(u => u.Id == userId);
+            if (user != null)
+            {
+                if (!string.IsNullOrWhiteSpace(textBox_login.Text))
+                    user.Login = textBox_login.Text;
+                if (!string.IsNullOrWhiteSpace(textBox_email.Text))
+                    user.Email = textBox_email.Text;
+                if (!string.IsNullOrWhiteSpace(textBox_password.Text))
+                    user.Password = textBox_password.Text;
+                context.SaveChanges();
+                MessageBox.Show("Изменения успешно сохранены.");
+            }
+        }
+        UpdatePersonalAccount();
+    }
+    private void UpdatePersonalAccount()
+    {
+        personalAccount = Application.OpenForms["PersonalAccount"] as PersonalAccount;
+        if (personalAccount != null)
+        {
+            personalAccount.Close();
+            personalAccount = new PersonalAccount();
+            personalAccount.Show();
+        }
+        mainMenu = Application.OpenForms["MainMenu"] as MainMenu;
+        if (mainMenu != null)
+        {
+            mainMenu.Hide();
+        }
+    }
+    private void but_save_Click(object sender, EventArgs e)
+    {
+        SaveChanges();
+    }
+    private bool Processing(string login, string email, string password)
+    {
+        if (!string.IsNullOrWhiteSpace(login) && !IsValidLogin(login))
+        {
+            MessageBox.Show("Логин должен содержать не менее 3 символов и состоять только из букв и цифр.");
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(email) && !IsValidEmail(email))
+        {
+            MessageBox.Show("Введите корректный адрес электронной почты.");
+            return false;
+        }
+        if (!string.IsNullOrWhiteSpace(password) && !IsValidPassword(password))
+        {
+            MessageBox.Show("Пароль должен содержать не менее 3 символов.");
+            return false;
+        }
+        return true;
+    }
+    private bool IsValidEmail(string email)
+    {
+        try
+        {
+            string emailPattern = @"^[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*@[a-zA-Z]+\.[a-zA-Z]+$";
+            if (!Regex.IsMatch(email, emailPattern))
+                return false;
+            var addr = new System.Net.Mail.MailAddress(email);
+            if (addr.Address != email)
+                return false;
+
+            string domain = email.Split('@')[1];
+            return DomainExists(domain);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    private bool IsValidLogin(string login)
+    {
+        return login.Length >= 3 && login.All(c => char.IsLetterOrDigit(c));
+    }
+    private bool IsValidPassword(string password)
+    {
+        return password.Length >= 3;
+    }
+    private static bool DomainExists(string domain)
+    {
+        try
+        {
+            var hostEntry = Dns.GetHostEntry(domain);
+            return hostEntry.AddressList.Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void but_cancel_Click(object sender, EventArgs e)
+    {
+        ResetChanges();
+    }
+    private void ResetChanges()
+    {
+        textBox_login.Visible = false;
+        textBox_email.Visible = false;
+        textBox_password.Visible = false;
+
+        lab_showLogin.Visible = true;
+        lab_showEmail.Visible = true;
+        but_changeLogin.Visible = true;
+        but_changeEmail.Visible = true;
+        but_changePassword.Visible = true;
+
+        textBox_login.Text = string.Empty;
+        textBox_email.Text = string.Empty;
+        textBox_password.Text = string.Empty;
+
+        LoadUserData();
+    }
+}
+
